@@ -1,0 +1,12 @@
+{
+  "name": "expertfinderr",
+  "version": "1.0.0",
+  "description": "Expert Finder Panel for Newsroom",
+  "scripts": {
+    "build": "echo 'No build step required'"
+  },
+  "dependencies": {
+    "@netlify/functions": "^2.4.0",
+    "@neondatabase/serverless": "^0.9.0"
+  }
+}

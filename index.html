@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>کارشناس‌یاب - پنل جستجوی کارشناسان</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { font-family: 'Vazirmatn', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .tag { transition: all 0.2s ease; }
+        .tag:hover { transform: translateY(-1px); }
+        .expert-card { transition: all 0.3s ease; }
+        .expert-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1); }
+        .tab-active { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; }
+        .gradient-bg { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdf4 100%); }
+        .input-field { transition: all 0.2s ease; }
+        .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); outline: none; }
+        .toast { animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .modal-overlay { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .excel-table { border-collapse: collapse; width: 100%; }
+        .excel-table th { background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%); color: white; font-weight: 600; padding: 10px 6px; text-align: right; border: 1px solid #365980; position: sticky; top: 0; z-index: 10; font-size: 11px; }
+        .excel-table td { padding: 4px; border: 1px solid #d1d5db; background: white; }
+        .excel-table tr:nth-child(even) td { background: #f8fafc; }
+        .excel-table tr:hover td { background: #e0f2fe !important; }
+        .excel-input { width: 100%; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; font-size: 11px; }
+        .excel-input:focus { background: white; border-color: #3b82f6; outline: none; }
+        .admin-icon { cursor: pointer; transition: all 0.3s ease; }
+        .admin-icon:hover { transform: scale(1.1); }
+        .delete-btn { opacity: 0.5; transition: all 0.2s; }
+        .delete-btn:hover { opacity: 1; color: #dc2626; }
+        .loading-spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .saving-indicator { position: fixed; bottom: 20px; left: 20px; background: #1e3a5f; color: white; padding: 12px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px; z-index: 100; }
+        .whatsapp-btn { background: #25D366; }
+        .whatsapp-btn:hover { background: #128C7E; }
+        .admin-tab { padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.2s; font-size: 14px; }
+        .admin-tab.active { background: white; color: #1e3a5f; font-weight: 600; }
+        .admin-tab:not(.active) { background: #475569; color: #cbd5e1; }
+        .edit-btn { opacity: 0; transition: all 0.2s; }
+        .expert-card:hover .edit-btn { opacity: 1; }
+        .social-link { transition: all 0.2s; }
+        .social-link:hover { transform: scale(1.05); }
+        .twitter-btn { background: #000000; }
+        .instagram-btn { background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div id="app"></div>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const API = '/api';
+        const ADMIN_PASS = "tehranprague";
+
+        const TIMEZONES = [
+            { value: 'Asia/Tehran', label: 'تهران (GMT+3:30)' },
+            { value: 'Europe/London', label: 'لندن (GMT+0)' },
+            { value: 'Europe/Paris', label: 'پاریس (GMT+1)' },
+            { value: 'Europe/Berlin', label: 'برلین (GMT+1)' },
+            { value: 'America/New_York', label: 'نیویورک (GMT-5)' },
+            { value: 'America/Los_Angeles', label: 'لس آنجلس (GMT-8)' },
+            { value: 'Asia/Dubai', label: 'دبی (GMT+4)' },
+            { value: 'Asia/Istanbul', label: 'استانبول (GMT+3)' },
+            { value: 'Europe/Moscow', label: 'مسکو (GMT+3)' },
+            { value: 'Asia/Tokyo', label: 'توکیو (GMT+9)' },
+            { value: 'Australia/Sydney', label: 'سیدنی (GMT+11)' },
+            { value: 'Europe/Prague', label: 'پراگ (GMT+1)' },
+            { value: 'Asia/Kabul', label: 'کابل (GMT+4:30)' },
+            { value: 'Asia/Baghdad', label: 'بغداد (GMT+3)' },
+        ];
+
+        function getTimeInTimezone(tz) {
+            try { return new Date().toLocaleTimeString('fa-IR', { timeZone: tz, hour: '2-digit', minute: '2-digit' }); } 
+            catch { return ''; }
+        }
+
+        function App() {
+            const [dbReady, setDbReady] = useState(false);
+            const [initError, setInitError] = useState('');
+            const [loggedIn, setLoggedIn] = useState(false);
+            const [user, setUser] = useState(null);
+            const [loginUser, setLoginUser] = useState('');
+            const [loginPass, setLoginPass] = useState('');
+            const [loginErr, setLoginErr] = useState('');
+            const [loginLoading, setLoginLoading] = useState(false);
+            const [experts, setExperts] = useState([]);
+            const [fields, setFields] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
+            const [tab, setTab] = useState('search');
+            const [search, setSearch] = useState('');
+            const [filterField, setFilterField] = useState('');
+            const [expanded, setExpanded] = useState(null);
+            const [toast, setToast] = useState('');
+            const [showAdminLogin, setShowAdminLogin] = useState(false);
+            const [showAdmin, setShowAdmin] = useState(false);
+            const [adminPass, setAdminPass] = useState('');
+            const [adminErr, setAdminErr] = useState(false);
+            const [adminTab, setAdminTab] = useState('experts');
+            const [newField, setNewField] = useState('');
+            const [newUser, setNewUser] = useState({ name: '', username: '', password: '' });
+            const [editExpert, setEditExpert] = useState(null);
+            const [editPass, setEditPass] = useState('');
+            const [editPassErr, setEditPassErr] = useState('');
+            const [editVerified, setEditVerified] = useState(false);
+            const [showEdit, setShowEdit] = useState(false);
+            const [showImport, setShowImport] = useState(false);
+            const [importData, setImportData] = useState([]);
+            const [importLoading, setImportLoading] = useState(false);
+            const [form, setForm] = useState({ name: '', fields: [], phone: '', whatsapp: '', whatsappMessage: '', email: '', hasIntermediary: false, intermediary: '', intermediaryPhone: '', notes: '', location: '', timezone: '', twitter: '', instagram: '' });
+            const saveTimer = useRef(null);
+
+            const notify = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+            useEffect(() => {
+                const initDB = async () => {
+                    try {
+                        const res = await fetch(`${API}/init-db`);
+                        const data = await res.json();
+                        if (data.success) setDbReady(true);
+                        else setInitError(data.error || 'خطا');
+                    } catch { setInitError('خطا در اتصال'); }
+                };
+                initDB();
+            }, []);
+
+            useEffect(() => {
+                if (dbReady) {
+                    const saved = localStorage.getItem('user');
+                    if (saved) { try { setUser(JSON.parse(saved)); setLoggedIn(true); } catch {} }
+                }
+            }, [dbReady]);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setLoginLoading(true);
+                setLoginErr('');
+                try {
+                    const res = await fetch(`${API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUser, password: loginPass }) });
+                    const data = await res.json();
+                    if (data.success) { setUser(data.data); setLoggedIn(true); localStorage.setItem('user', JSON.stringify(data.data)); }
+                    else setLoginErr(data.error);
+                } catch { setLoginErr('خطا'); }
+                setLoginLoading(false);
+            };
+
+            const logout = () => { setLoggedIn(false); setUser(null); localStorage.removeItem('user'); setLoginUser(''); setLoginPass(''); };
+
+            const fetchData = async () => {
+                setLoading(true);
+                try {
+                    const [expRes, fldRes] = await Promise.all([fetch(`${API}/experts`), fetch(`${API}/fields`)]);
+                    const expData = await expRes.json();
+                    const fldData = await fldRes.json();
+                    if (expData.success) setExperts(expData.data);
+                    if (fldData.success) setFields(fldData.data);
+                } catch (e) { console.error(e); }
+                setLoading(false);
+            };
+
+            const fetchUsers = async () => {
+                const res = await fetch(`${API}/users`);
+                const data = await res.json();
+                if (data.success) setUsers(data.data);
+            };
+
+            useEffect(() => { if (loggedIn) fetchData(); }, [loggedIn]);
+
+            const openAdmin = () => { setShowAdminLogin(true); setAdminPass(''); setAdminErr(false); };
+            const submitAdmin = (e) => {
+                e.preventDefault();
+                if (adminPass === ADMIN_PASS) { setShowAdminLogin(false); setShowAdmin(true); fetchUsers(); }
+                else setAdminErr(true);
+            };
+
+            const canEdit = (exp) => user && (user.isAdmin || exp.addedByUsername === user.username);
+            
+            const startEdit = (exp) => {
+                if (!canEdit(exp)) { notify('❌ فقط مخاطبین خود را می‌توانید ویرایش کنید'); return; }
+                setEditExpert({ ...exp });
+                setEditPass('');
+                setEditPassErr('');
+                setEditVerified(false);
+                setShowEdit(true);
+            };
+
+            const verifyPass = async () => {
+                const res = await fetch(`${API}/verify-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user.username, password: editPass }) });
+                const data = await res.json();
+                if (data.success) { setEditVerified(true); setEditPassErr(''); }
+                else setEditPassErr(data.error || 'رمز اشتباه');
+            };
+
+            const saveEdit = async () => {
+                setSaving(true);
+                const res = await fetch(`${API}/experts/update`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editExpert) });
+                const data = await res.json();
+                if (data.success) { setExperts(prev => prev.map(e => e.id === editExpert.id ? data.data : e)); setShowEdit(false); notify('✅ ذخیره شد'); }
+                else notify('❌ خطا');
+                setSaving(false);
+            };
+
+            const deleteEditExpert = async () => {
+                if (!confirm('آیا از حذف این کارشناس اطمینان دارید؟')) return;
+                const res = await fetch(`${API}/experts/delete?id=${editExpert.id}`, { method: 'DELETE' });
+                if ((await res.json()).success) {
+                    setExperts(prev => prev.filter(e => e.id !== editExpert.id));
+                    setShowEdit(false);
+                    notify('🗑️ حذف شد');
+                } else notify('❌ خطا');
+            };
+
+            const toggleEditField = (f) => {
+                setEditExpert(prev => ({
+                    ...prev,
+                    fields: prev.fields?.includes(f) ? prev.fields.filter(x => x !== f) : [...(prev.fields || []), f]
+                }));
+            };
+
+            const adminUpdate = async (id, field, value) => {
+                setExperts(prev => prev.map(e => e.id === id ? { ...e, [field]: field === 'fields' ? value.split(/[،,]/).map(f => f.trim()).filter(f => f) : value } : e));
+                if (saveTimer.current) clearTimeout(saveTimer.current);
+                saveTimer.current = setTimeout(async () => {
+                    setSaving(true);
+                    const exp = experts.find(e => e.id === id);
+                    const updated = { ...exp, [field]: field === 'fields' ? value.split(/[،,]/).map(f => f.trim()).filter(f => f) : value };
+                    await fetch(`${API}/experts/update`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+                    setSaving(false);
+                }, 1000);
+            };
+
+            const deleteExpert = async (id) => {
+                if (!confirm('حذف؟')) return;
+                await fetch(`${API}/experts/delete?id=${id}`, { method: 'DELETE' });
+                setExperts(prev => prev.filter(e => e.id !== id));
+                notify('🗑️ حذف شد');
+            };
+
+            const addRow = async () => {
+                const res = await fetch(`${API}/experts/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'جدید', fields: [], addedBy: 'ادمین', addedByUsername: 'adminfarda' }) });
+                const data = await res.json();
+                if (data.success) { setExperts(prev => [data.data, ...prev]); notify('✅ اضافه شد'); }
+            };
+
+            const addUser = async () => {
+                if (!newUser.name || !newUser.username || !newUser.password) { notify('⚠️ همه فیلدها الزامی'); return; }
+                const res = await fetch(`${API}/users/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newUser) });
+                const data = await res.json();
+                if (data.success) { setUsers(prev => [data.data, ...prev]); setNewUser({ name: '', username: '', password: '' }); notify('✅ اضافه شد'); }
+                else notify(`❌ ${data.error}`);
+            };
+
+            const deleteUser = async (id) => {
+                if (!confirm('حذف؟')) return;
+                const res = await fetch(`${API}/users/delete?id=${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) { setUsers(prev => prev.filter(u => u.id !== id)); notify('🗑️ حذف شد'); }
+                else notify(`❌ ${data.error}`);
+            };
+
+            const addField = async () => {
+                if (!newField.trim()) return;
+                const res = await fetch(`${API}/fields/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newField.trim() }) });
+                if ((await res.json()).success) { setFields(prev => [...prev, newField.trim()].sort()); setNewField(''); notify('✅'); }
+            };
+
+            const deleteField = async (name) => {
+                if (!confirm(`حذف "${name}"؟`)) return;
+                await fetch(`${API}/fields/delete?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+                setFields(prev => prev.filter(f => f !== name));
+            };
+
+            const handleFile = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const wb = XLSX.read(evt.target.result, { type: 'binary' });
+                    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                    const mapped = json.map(r => ({
+                        name: r['name'] || r['نام'] || '',
+                        fields: r['fields'] || r['حوزه_تخصص'] || r['تخصص'] || '',
+                        phone: r['phone'] || r['تلفن'] || '',
+                        whatsapp: r['whatsapp'] || r['واتساپ'] || '',
+                        email: r['email'] || r['ایمیل'] || '',
+                        location: r['location'] || r['موقعیت'] || r['شهر'] || '',
+                        timezone: r['timezone'] || r['منطقه_زمانی'] || '',
+                        twitter: r['twitter'] || r['توییتر'] || '',
+                        instagram: r['instagram'] || r['اینستاگرام'] || '',
+                        notes: r['notes'] || r['یادداشت'] || ''
+                    }));
+                    setImportData(mapped);
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            const doImport = async () => {
+                if (!importData.length) return;
+                setImportLoading(true);
+                const res = await fetch(`${API}/experts/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ experts: importData, addedBy: user.name, addedByUsername: user.username }) });
+                const data = await res.json();
+                setImportLoading(false);
+                if (data.success) { notify(`✅ ${data.imported} وارد شد`); setShowImport(false); setImportData([]); fetchData(); }
+            };
+
+            const addExpert = async (e) => {
+                e.preventDefault();
+                if (!form.name || !form.fields.length) { notify('⚠️ نام و تخصص الزامی'); return; }
+                const res = await fetch(`${API}/experts/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, addedBy: user.name, addedByUsername: user.username, intermediary: form.hasIntermediary ? form.intermediary : null, intermediaryPhone: form.hasIntermediary ? form.intermediaryPhone : null }) });
+                const data = await res.json();
+                if (data.success) { 
+                    setExperts(prev => [data.data, ...prev]); 
+                    setForm({ name: '', fields: [], phone: '', whatsapp: '', whatsappMessage: '', email: '', hasIntermediary: false, intermediary: '', intermediaryPhone: '', notes: '', location: '', timezone: '', twitter: '', instagram: '' }); 
+                    setTab('search'); 
+                    notify('✅ اضافه شد'); 
+                }
+            };
+
+            const toggleField = (f) => setForm(prev => ({ ...prev, fields: prev.fields.includes(f) ? prev.fields.filter(x => x !== f) : [...prev.fields, f] }));
+
+            const filtered = experts.filter(e => {
+                const ms = !search || e.name?.includes(search) || e.fields?.some(f => f.includes(search)) || e.notes?.includes(search) || e.location?.includes(search);
+                const mf = !filterField || e.fields?.includes(filterField);
+                return ms && mf;
+            });
+
+            const waLink = (e) => e.whatsapp ? `https://wa.me/${e.whatsapp.replace(/[\s\-\(\)\+]/g, '').replace(/^0/, '')}${e.whatsappMessage ? '?text=' + encodeURIComponent(e.whatsappMessage) : ''}` : null;
+
+            if (!dbReady) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="text-center">
+                            {initError ? (
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                                    <p className="text-red-600 mb-2">❌ خطا</p>
+                                    <p className="text-red-500 text-sm">{initError}</p>
+                                    <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg">تلاش مجدد</button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="loading-spinner mx-auto mb-4" style={{width:50,height:50}}></div>
+                                    <p className="text-gray-600">راه‌اندازی...</p>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!loggedIn) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl modal-content">
+                            <div className="text-center mb-8">
+                                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </div>
+                                <h1 className="text-2xl font-bold text-gray-800">کارشناس‌یاب</h1>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <div><label className="block text-sm mb-1">نام کاربری</label><input type="text" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-200" dir="ltr" required /></div>
+                                <div><label className="block text-sm mb-1">رمز عبور</label><input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-200" required /></div>
+                                {loginErr && <p className="text-red-500 text-sm text-center">{loginErr}</p>}
+                                <button type="submit" disabled={loginLoading} className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium disabled:opacity-50">
+                                    {loginLoading ? <div className="loading-spinner mx-auto" style={{width:20,height:20}}></div> : 'ورود'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen p-4 md:p-8">
+                    {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 toast"><div className="bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg">{toast}</div></div>}
+                    {saving && <div className="saving-indicator"><div className="loading-spinner"></div><span>ذخیره...</span></div>}
+
+                    {showAdminLogin && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-overlay">
+                            <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 modal-content shadow-2xl">
+                                <h3 className="text-xl font-bold text-center mb-4">پنل مدیریت</h3>
+                                <form onSubmit={submitAdmin}>
+                                    <input type="password" value={adminPass} onChange={(e) => { setAdminPass(e.target.value); setAdminErr(false); }} placeholder="رمز عبور" className={`w-full px-4 py-3 rounded-xl border-2 ${adminErr ? 'border-red-400' : 'border-gray-200'} text-center`} autoFocus />
+                                    {adminErr && <p className="text-red-500 text-sm mt-2 text-center">رمز اشتباه</p>}
+                                    <div className="flex gap-3 mt-6">
+                                        <button type="submit" className="flex-1 py-3 bg-slate-800 text-white rounded-xl">ورود</button>
+                                        <button type="button" onClick={() => setShowAdminLogin(false)} className="px-6 py-3 border-2 border-gray-200 rounded-xl">انصراف</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {showEdit && editExpert && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-overlay p-4">
+                            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto modal-content shadow-2xl">
+                                <div className="p-4 border-b sticky top-0 bg-white z-10 flex items-center justify-between">
+                                    <h3 className="text-lg font-bold">ویرایش: {editExpert.name}</h3>
+                                    {editVerified && <button onClick={deleteEditExpert} className="px-3 py-1 bg-red-500 text-white rounded-lg text-sm">🗑️ حذف</button>}
+                                </div>
+                                {!editVerified ? (
+                                    <div className="p-6">
+                                        <p className="text-gray-600 mb-4">رمز عبور خود را وارد کنید:</p>
+                                        <input type="password" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 mb-2" placeholder="رمز عبور" />
+                                        {editPassErr && <p className="text-red-500 text-sm mb-4">{editPassErr}</p>}
+                                        <div className="flex gap-3">
+                                            <button onClick={verifyPass} className="flex-1 py-3 bg-blue-600 text-white rounded-xl">تأیید</button>
+                                            <button onClick={() => setShowEdit(false)} className="px-6 py-3 border-2 border-gray-200 rounded-xl">انصراف</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 space-y-4">
+                                        <div className="grid md:grid-cols-2 gap-3">
+                                            <div><label className="block text-sm mb-1">نام</label><input type="text" value={editExpert.name || ''} onChange={(e) => setEditExpert({...editExpert, name: e.target.value})} className="w-full px-3 py-2 rounded-lg border-2 border-gray-200" /></div>
+                                            <div><label className="block text-sm mb-1">تلفن</label><input type="text" value={editExpert.phone || ''} onChange={(e) => setEditExpert({...editExpert, phone: e.target.value})} className="w-full px-3 py-2 rounded-lg border-2 border-gray-200" dir="ltr" /></div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-sm mb-1">حوزه‌های تخصص</label>
+                                            <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl border max-h-28 overflow-y-auto">
+                                                {fields.map(f => (
+                                                    <button key={f} type="button" onClick={() => toggleEditField(f)} className={`tag px-2 py-1 rounded text-xs ${editExpert.fields?.includes(f) ? 'bg-blue-600 text-white' : 'bg-white border'}`}>
+                                                        {editExpert.fields?.includes(f) && '✓ '}{f}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid md:grid-cols-2 gap-3">
+                                            <div><label className="block text-sm mb-1">واتساپ</label><input type="text" value={editExpert.whatsapp || ''} onChange={(e) => setEditExpert({...editExpert, whatsapp: e.target.value})} className="w-full px-3 py-2 rounded-lg border-2 border-gray-200" dir="ltr" placeholder="98912..." /></div>
+                                            <div><label className="block text-sm mb-1">ایمیل</label><input type="email" value={editExpert.email || ''} onChange={(e) => setEditExpert({...editExpert, email: e.target.value})} className="w-full px-3 py-2 rounded-lg border-2 border-gray-200" dir="ltr" /></div>
+                                        </div>
+
+                                        <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                                            <h4 className="font-medium text-purple-800 mb-2 text-sm">📍 موقعیت</h4>
+                                            <div className="grid md:grid-cols-2 gap-3">
+                                                <input type="text" value={editExpert.location || ''} onChange={(e) => setEditExpert({...editExpert, location: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" placeholder="شهر، کشور" />
+                                                <select value={editExpert.timezone || ''} onChange={(e) => setEditExpert({...editExpert, timezone: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm">
+                                                    <option value="">منطقه زمانی</option>
+                                                    {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-3 bg-pink-50 rounded-xl border border-pink-200">
+                                            <h4 className="font-medium text-pink-800 mb-2 text-sm">📱 شبکه‌های اجتماعی</h4>
+                                            <div className="grid md:grid-cols-2 gap-3">
+                                                <input type="text" value={editExpert.twitter || ''} onChange={(e) => setEditExpert({...editExpert, twitter: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" dir="ltr" placeholder="X @username" />
+                                                <input type="text" value={editExpert.instagram || ''} onChange={(e) => setEditExpert({...editExpert, instagram: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" dir="ltr" placeholder="Instagram @username" />
+                                            </div>
+                                        </div>
+
+                                        <div><label className="block text-sm mb-1">یادداشت</label><textarea value={editExpert.notes || ''} onChange={(e) => setEditExpert({...editExpert, notes: e.target.value})} className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 text-sm" rows="2" /></div>
+                                        
+                                        <div className="flex gap-3 pt-2">
+                                            <button onClick={saveEdit} disabled={saving} className="flex-1 py-3 bg-green-600 text-white rounded-xl disabled:opacity-50">{saving ? 'ذخیره...' : '✅ ذخیره'}</button>
+                                            <button onClick={() => setShowEdit(false)} className="px-6 py-3 border-2 border-gray-200 rounded-xl">انصراف</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {showImport && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-overlay p-4">
+                            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto modal-content shadow-2xl">
+                                <div className="p-4 border-b sticky top-0 bg-white z-10">
+                                    <h3 className="text-lg font-bold">📥 وارد کردن از اکسل</h3>
+                                </div>
+                                <div className="p-4">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-sm">
+                                        <p className="font-bold text-blue-800 mb-2">ستون‌ها:</p>
+                                        <p className="text-blue-700">name, fields, phone, whatsapp, email, location, timezone, twitter, instagram, notes</p>
+                                    </div>
+                                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl mb-4" />
+                                    {importData.length > 0 && <p className="mb-4 text-green-600">{importData.length} ردیف آماده</p>}
+                                    <div className="flex gap-3">
+                                        <button onClick={doImport} disabled={!importData.length || importLoading} className="flex-1 py-3 bg-green-600 text-white rounded-xl disabled:opacity-50">
+                                            {importLoading ? 'در حال وارد کردن...' : `وارد کردن`}
+                                        </button>
+                                        <button onClick={() => { setShowImport(false); setImportData([]); }} className="px-6 py-3 border-2 border-gray-200 rounded-xl">انصراف</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showAdmin && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 modal-overlay p-4">
+                            <div className="bg-white rounded-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden modal-content shadow-2xl flex flex-col">
+                                <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-4 flex items-center justify-between">
+                                    <h2 className="text-lg font-bold">⚙️ پنل مدیریت</h2>
+                                    <button onClick={() => setShowAdmin(false)} className="p-2 hover:bg-white/10 rounded-lg">✕</button>
+                                </div>
+                                <div className="bg-slate-700 px-4 pt-2 flex gap-1">
+                                    {['experts', 'users', 'fields'].map(t => (
+                                        <button key={t} onClick={() => setAdminTab(t)} className={`admin-tab ${adminTab === t ? 'active' : ''}`}>
+                                            {t === 'experts' && '👥 کارشناسان'}{t === 'users' && '🔐 کاربران'}{t === 'fields' && '🏷️ حوزه‌ها'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {adminTab === 'experts' && (
+                                    <>
+                                        <div className="bg-slate-100 p-2 flex gap-2 border-b">
+                                            <button onClick={addRow} className="px-3 py-1 bg-green-600 text-white rounded text-sm">➕</button>
+                                            <button onClick={fetchData} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">🔄</button>
+                                        </div>
+                                        <div className="flex-1 overflow-auto">
+                                            <table className="excel-table">
+                                                <thead><tr><th>#</th><th>نام</th><th>حوزه‌ها</th><th>تلفن</th><th>واتساپ</th><th>موقعیت</th><th>X</th><th>IG</th><th>🗑️</th></tr></thead>
+                                                <tbody>
+                                                    {experts.map((e, i) => (
+                                                        <tr key={e.id}>
+                                                            <td className="text-center text-xs">{i+1}</td>
+                                                            <td><input className="excel-input" value={e.name||''} onChange={(ev) => adminUpdate(e.id, 'name', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" value={e.fields?.join('، ')||''} onChange={(ev) => adminUpdate(e.id, 'fields', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" dir="ltr" value={e.phone||''} onChange={(ev) => adminUpdate(e.id, 'phone', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" dir="ltr" value={e.whatsapp||''} onChange={(ev) => adminUpdate(e.id, 'whatsapp', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" value={e.location||''} onChange={(ev) => adminUpdate(e.id, 'location', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" dir="ltr" value={e.twitter||''} onChange={(ev) => adminUpdate(e.id, 'twitter', ev.target.value)} /></td>
+                                                            <td><input className="excel-input" dir="ltr" value={e.instagram||''} onChange={(ev) => adminUpdate(e.id, 'instagram', ev.target.value)} /></td>
+                                                            <td className="text-center"><button onClick={() => deleteExpert(e.id)} className="delete-btn text-xs">🗑️</button></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                )}
+
+                                {adminTab === 'users' && (
+                                    <div className="flex-1 overflow-auto p-4">
+                                        <div className="max-w-xl mx-auto space-y-4">
+                                            <div className="bg-white rounded-xl p-4 shadow border">
+                                                <div className="grid grid-cols-3 gap-2 mb-2">
+                                                    <input placeholder="نام" value={newUser.name} onChange={(e) => setNewUser({...newUser, name: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" />
+                                                    <input placeholder="نام کاربری" value={newUser.username} onChange={(e) => setNewUser({...newUser, username: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" dir="ltr" />
+                                                    <input placeholder="رمز" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} className="px-3 py-2 border rounded-lg text-sm" dir="ltr" />
+                                                </div>
+                                                <button onClick={addUser} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">افزودن</button>
+                                            </div>
+                                            <div className="bg-white rounded-xl shadow border overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-gray-50"><tr><th className="p-2 text-right">نام</th><th className="p-2 text-right">کاربری</th><th className="p-2"></th></tr></thead>
+                                                    <tbody>
+                                                        {users.map(u => (
+                                                            <tr key={u.id} className="border-t">
+                                                                <td className="p-2">{u.name} {u.isAdmin && <span className="text-purple-600 text-xs">(ادمین)</span>}</td>
+                                                                <td className="p-2" dir="ltr">{u.username}</td>
+                                                                <td className="p-2 text-center">{!u.isAdmin && <button onClick={() => deleteUser(u.id)} className="text-red-500 text-xs">حذف</button>}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {adminTab === 'fields' && (
+                                    <div className="flex-1 overflow-auto p-4">
+                                        <div className="max-w-xl mx-auto space-y-4">
+                                            <div className="flex gap-2">
+                                                <input placeholder="حوزه جدید..." value={newField} onChange={(e) => setNewField(e.target.value)} className="flex-1 px-4 py-2 border rounded-lg" onKeyPress={(e) => e.key === 'Enter' && addField()} />
+                                                <button onClick={addField} className="px-4 py-2 bg-green-600 text-white rounded-lg">+</button>
+                                            </div>
+                                            <div className="bg-white rounded-xl shadow border p-4">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {fields.map(f => (
+                                                        <div key={f} className="flex items-center gap-1 bg-gray-100 px-3 py-1 rounded-lg group hover:bg-gray-200 text-sm">
+                                                            <span>{f}</span>
+                                                            <button onClick={() => deleteField(f)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100">×</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-slate-100 p-2 border-t flex justify-end">
+                                    <button onClick={() => setShowAdmin(false)} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm">بستن</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="max-w-4xl mx-auto">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center admin-icon" onClick={openAdmin}>
+                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">کارشناس‌یاب</h1>
+                                    <p className="text-sm text-gray-500">خوش آمدید، {user?.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={logout} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm">خروج</button>
+                        </div>
+
+                        <div className="flex gap-2 mb-6 bg-white/50 p-2 rounded-xl">
+                            <button onClick={() => setTab('search')} className={`flex-1 py-3 rounded-lg font-medium ${tab === 'search' ? 'tab-active shadow-lg' : 'text-gray-600 hover:bg-white/80'}`}>🔍 جستجو</button>
+                            <button onClick={() => setTab('add')} className={`flex-1 py-3 rounded-lg font-medium ${tab === 'add' ? 'tab-active shadow-lg' : 'text-gray-600 hover:bg-white/80'}`}>➕ افزودن</button>
+                            <button onClick={() => setShowImport(true)} className="flex-1 py-3 rounded-lg font-medium text-gray-600 hover:bg-white/80">📥 اکسل</button>
+                        </div>
+
+                        {loading && <div className="text-center py-16"><div className="loading-spinner mx-auto" style={{width:40,height:40}}></div></div>}
+
+                        {!loading && tab === 'search' && (
+                            <div className="space-y-4">
+                                <div className="glass-card rounded-2xl p-4 shadow-lg">
+                                    <div className="flex flex-col md:flex-row gap-3">
+                                        <input type="text" placeholder="جستجو..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 input-field" />
+                                        <select value={filterField} onChange={(e) => setFilterField(e.target.value)} className="px-4 py-3 rounded-xl border-2 border-gray-200 bg-white min-w-[150px]">
+                                            <option value="">همه حوزه‌ها</option>
+                                            {fields.map(f => <option key={f} value={f}>{f}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <p className="text-gray-600 px-2"><span className="font-bold text-blue-600">{filtered.length}</span> کارشناس</p>
+
+                                <div className="space-y-3">
+                                    {filtered.map(e => (
+                                        <div key={e.id} className="expert-card glass-card rounded-2xl overflow-hidden shadow-md">
+                                            <div className="p-4 cursor-pointer" onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white text-lg font-bold">{e.name?.charAt(0) || '?'}</div>
+                                                        <div>
+                                                            <h3 className="font-bold text-gray-800">{e.name}</h3>
+                                                            <div className="flex flex-wrap gap-1 mt-1">{e.fields?.slice(0,3).map(f => <span key={f} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{f}</span>)}{e.fields?.length > 3 && <span className="text-xs text-gray-400">+{e.fields.length-3}</span>}</div>
+                                                            {e.location && <p className="text-xs text-gray-500 mt-1">📍 {e.location}</p>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        {canEdit(e) && <button onClick={(ev) => { ev.stopPropagation(); startEdit(e); }} className="edit-btn p-2 text-blue-500 hover:bg-blue-50 rounded-lg text-sm">✏️</button>}
+                                                        <svg className={`w-5 h-5 text-gray-400 transition-transform ${expanded === e.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {expanded === e.id && (
+                                                <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+                                                    <div className="grid md:grid-cols-2 gap-3">
+                                                        <div className="space-y-2">
+                                                            {(e.location || e.timezone) && (
+                                                                <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                                                    {e.location && <p className="text-purple-700 text-sm">📍 {e.location}</p>}
+                                                                    {e.timezone && (
+                                                                        <p className="text-purple-600 text-xs mt-1">
+                                                                            🕐 {TIMEZONES.find(t => t.value === e.timezone)?.label || e.timezone}
+                                                                            <span className="font-bold mr-2">| ساعت: {getTimeInTimezone(e.timezone)}</span>
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {e.phone && (
+                                                                <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg text-sm">
+                                                                    <span>📞</span>
+                                                                    <span dir="ltr">{e.phone}</span>
+                                                                    <button onClick={() => { navigator.clipboard.writeText(e.phone); notify('📋 کپی شد'); }} className="mr-auto text-blue-500 text-xs">کپی</button>
+                                                                </div>
+                                                            )}
+                                                            {e.whatsapp && <a href={waLink(e)} target="_blank" rel="noopener" className="flex items-center gap-2 whatsapp-btn text-white p-2 rounded-lg text-sm">📱 واتساپ</a>}
+                                                            {e.email && <div className="bg-gray-50 p-2 rounded-lg text-sm"><span>📧 </span><span dir="ltr">{e.email}</span></div>}
+                                                            {!e.phone && !e.whatsapp && e.intermediary && (
+                                                                <div className="bg-amber-50 p-2 rounded-lg border border-amber-200 text-sm">
+                                                                    <p className="text-amber-700">واسط: {e.intermediary} {e.intermediaryPhone && <span dir="ltr">({e.intermediaryPhone})</span>}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {(e.twitter || e.instagram) && (
+                                                                <div className="flex gap-2 flex-wrap">
+                                                                    {e.twitter && (
+                                                                        <a href={`https://x.com/${e.twitter.replace('@', '')}`} target="_blank" rel="noopener" className="social-link flex items-center gap-1 twitter-btn text-white px-3 py-1 rounded-lg text-xs">
+                                                                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                                                                            {e.twitter}
+                                                                        </a>
+                                                                    )}
+                                                                    {e.instagram && (
+                                                                        <a href={`https://instagram.com/${e.instagram.replace('@', '')}`} target="_blank" rel="noopener" className="social-link flex items-center gap-1 instagram-btn text-white px-3 py-1 rounded-lg text-xs">
+                                                                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                                                                            {e.instagram}
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {e.notes && <div className="bg-gray-50 p-2 rounded-lg text-xs text-gray-600">{e.notes}</div>}
+                                                            <div className="text-xs text-gray-400 flex justify-between"><span>ثبت: {e.addedBy}</span><span>{e.lastContact}</span></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {filtered.length === 0 && <div className="text-center py-12 text-gray-500">کارشناسی یافت نشد</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {!loading && tab === 'add' && (
+                            <div className="glass-card rounded-2xl p-5 shadow-lg">
+                                <h2 className="text-lg font-bold mb-4">➕ افزودن کارشناس</h2>
+                                <form onSubmit={addExpert} className="space-y-4">
+                                    <div className="grid md:grid-cols-2 gap-3">
+                                        <div><label className="block text-sm mb-1">نام *</label><input type="text" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-200" required /></div>
+                                        <div><label className="block text-sm mb-1">ثبت‌کننده</label><input type="text" value={user?.name} disabled className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 bg-gray-50" /></div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm mb-1">حوزه‌های تخصص *</label>
+                                        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl border-2 border-gray-200 max-h-32 overflow-y-auto">
+                                            {fields.map(f => (
+                                                <button key={f} type="button" onClick={() => toggleField(f)} className={`tag px-2 py-1 rounded text-sm ${form.fields.includes(f) ? 'bg-blue-600 text-white' : 'bg-white border'}`}>
+                                                    {form.fields.includes(f) && '✓ '}{f}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm">
+                                            <input type="checkbox" checked={form.hasIntermediary} onChange={(e) => setForm({...form, hasIntermediary: e.target.checked})} className="w-4 h-4" />
+                                            <span>تماس از طریق واسط</span>
+                                        </label>
+                                    </div>
+
+                                    {!form.hasIntermediary ? (
+                                        <>
+                                            <div className="grid md:grid-cols-2 gap-3">
+                                                <div><label className="block text-sm mb-1">تلفن</label><input type="text" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-200" dir="ltr" /></div>
+                                                <div><label className="block text-sm mb-1">ایمیل</label><input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-200" dir="ltr" /></div>
+                                            </div>
+                                            <div className="p-3 bg-green-50 rounded-xl border border-green-200">
+                                                <h4 className="font-medium text-green-800 mb-2 text-sm">واتساپ</h4>
+                                                <div className="grid md:grid-cols-2 gap-3">
+                                                    <input type="text" value={form.whatsapp} onChange={(e) => setForm({...form, whatsapp: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" dir="ltr" placeholder="98912..." />
+                                                    <input type="text" value={form.whatsappMessage} onChange={(e) => setForm({...form, whatsappMessage: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" placeholder="پیام پیش‌فرض" />
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="grid md:grid-cols-2 gap-3 p-3 bg-blue-50 rounded-xl">
+                                            <div><label className="block text-sm mb-1">نام واسط *</label><input type="text" value={form.intermediary} onChange={(e) => setForm({...form, intermediary: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white" required={form.hasIntermediary} /></div>
+                                            <div><label className="block text-sm mb-1">تلفن واسط</label><input type="text" value={form.intermediaryPhone} onChange={(e) => setForm({...form, intermediaryPhone: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white" dir="ltr" /></div>
+                                        </div>
+                                    )}
+
+                                    <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                                        <h4 className="font-medium text-purple-800 mb-2 text-sm">📍 موقعیت</h4>
+                                        <div className="grid md:grid-cols-2 gap-3">
+                                            <input type="text" value={form.location} onChange={(e) => setForm({...form, location: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" placeholder="شهر، کشور" />
+                                            <select value={form.timezone} onChange={(e) => setForm({...form, timezone: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm">
+                                                <option value="">منطقه زمانی</option>
+                                                {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-3 bg-pink-50 rounded-xl border border-pink-200">
+                                        <h4 className="font-medium text-pink-800 mb-2 text-sm">📱 شبکه‌های اجتماعی</h4>
+                                        <div className="grid md:grid-cols-2 gap-3">
+                                            <input type="text" value={form.twitter} onChange={(e) => setForm({...form, twitter: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" dir="ltr" placeholder="X @username" />
+                                            <input type="text" value={form.instagram} onChange={(e) => setForm({...form, instagram: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-white text-sm" dir="ltr" placeholder="Instagram @username" />
+                                        </div>
+                                    </div>
+
+                                    <div><label className="block text-sm mb-1">یادداشت</label><textarea value={form.notes} onChange={(e) => setForm({...form, notes: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 text-sm" rows="2" /></div>
+                                    <button type="submit" className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium">✅ ثبت</button>
+                                </form>
+                            </div>
+                        )}
+
+                        <div className="mt-6 text-center text-sm text-gray-500">
+                            <p className="flex items-center justify-center gap-2"><span className="pulse-dot w-2 h-2 bg-green-500 rounded-full"></span>{experts.length} کارشناس</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+    </script>
+</body>
+</html>
